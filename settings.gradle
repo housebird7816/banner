@@ -1,0 +1,2 @@
+include ':app', ':bannerlib'
+rootProject.name='banner-demo'
