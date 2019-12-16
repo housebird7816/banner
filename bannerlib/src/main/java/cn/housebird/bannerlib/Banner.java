@@ -2,6 +2,7 @@ package cn.housebird.bannerlib;
 
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.media.MediaPlayer;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -9,6 +10,8 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -27,6 +30,7 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
+import cn.housebird.bannerlib.bean.MediaBean;
 import cn.housebird.bannerlib.listener.OnBannerClickListener;
 import cn.housebird.bannerlib.listener.OnBannerListener;
 import cn.housebird.bannerlib.loader.ImageLoaderInterface;
@@ -60,7 +64,7 @@ public class Banner extends FrameLayout implements ViewPager.OnPageChangeListene
     private int lastPosition = 1;
     private int scaleType = 1;
     private List<String> titles;
-    private List imageUrls;
+    private List<MediaBean> imageUrls;
     private List<View> imageViews;
     private List<ImageView> indicatorImages;
     private Context context;
@@ -236,19 +240,19 @@ public class Banner extends FrameLayout implements ViewPager.OnPageChangeListene
         return this;
     }
 
-    public Banner setImages(List<?> imageUrls) {
+    public Banner setImages(List<MediaBean> imageUrls) {
         this.imageUrls.addAll(imageUrls);
         this.count = imageUrls.size();
         return this;
     }
 
-    public void update(List<?> imageUrls, List<String> titles) {
+    public void update(List<MediaBean> imageUrls, List<String> titles) {
         this.titles.clear();
         this.titles.addAll(titles);
         update(imageUrls);
     }
 
-    public void update(List<?> imageUrls) {
+    public void update(List<MediaBean> imageUrls) {
         this.imageUrls.clear();
         this.imageViews.clear();
         this.indicatorImages.clear();
@@ -335,7 +339,7 @@ public class Banner extends FrameLayout implements ViewPager.OnPageChangeListene
         }
     }
 
-    private void setImageList(List<?> imagesUrl) {
+    private void setImageList(List<MediaBean> imagesUrl) {
         if (imagesUrl == null || imagesUrl.size() <= 0) {
             bannerDefaultImage.setVisibility(VISIBLE);
             Log.e(tag, "The image data set is empty.");
@@ -344,28 +348,96 @@ public class Banner extends FrameLayout implements ViewPager.OnPageChangeListene
         bannerDefaultImage.setVisibility(GONE);
         initImages();
         for (int i = 0; i <= count + 1; i++) {
-            Object url = null;
+            MediaBean bean = null;
             if (i == 0) {
-                url = imagesUrl.get(count - 1);
+                bean = imagesUrl.get(count - 1);
             } else if (i == count + 1) {
-                url = imagesUrl.get(0);
+                bean = imagesUrl.get(0);
             } else {
-                url = imagesUrl.get(i - 1);
+                bean = imagesUrl.get(i - 1);
             }
-            View imageView = null;
-            if (imageLoader != null) {
-                imageView = imageLoader.createImageView(context, url);
-            }
-            if (imageView == null) {
-                imageView = new ImageView(context);
-            }
-            setScaleType(imageView);
+            if (bean.getType() == MediaBean.MEDIA_TYPE_VIDEO) {
 
-            imageViews.add(imageView);
-            if (imageLoader != null)
-                imageLoader.displayImage(context, url, imageView);
-            else
-                Log.e(tag, "Please set images loader.");
+                SurfaceView surfaceView = new SurfaceView(context);
+                SurfaceHolder holder = surfaceView.getHolder();
+                final MediaBean finalBean = bean;
+                final MediaPlayer[] mediaPlayer = new MediaPlayer[1];
+                holder.addCallback(new SurfaceHolder.Callback() {
+                    @Override
+                    public void surfaceCreated(SurfaceHolder holder) {
+                        mediaPlayer[0] = new MediaPlayer();
+                        try {
+                            mediaPlayer[0].setDataSource(finalBean.getUrl());
+                            //3 准备播放
+                            mediaPlayer[0].prepareAsync();
+                            //3.0 设置显示给sfv surfaceholder 是用来维护视频播放的内容
+                            mediaPlayer[0].setDisplay(holder);
+                            //3.1 设置一个准备完成的监听
+                            mediaPlayer[0].setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                                @Override
+                                public void onPrepared(MediaPlayer mp) {
+                                    //4 开始播放
+                                    mediaPlayer[0].start();
+                                    mediaPlayer[0].setLooping(true);
+                                    //5 继续上次的位置继续播放
+                                    mediaPlayer[0].seekTo(finalBean.getVideoPosition());
+                                }
+                            });
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+
+                    @Override
+                    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+
+                    }
+
+                    @Override
+                    public void surfaceDestroyed(SurfaceHolder holder) {
+                        // 停止播放视频
+                        if (mediaPlayer[0] != null && mediaPlayer[0].isPlaying()) {
+                            // 获取到当前播放视频的位置
+                            finalBean.setVideoPosition(mediaPlayer[0].getCurrentPosition());
+                            mediaPlayer[0].stop();
+                        }
+                    }
+                });
+
+//                BannerVideoView videoView = null;
+//                videoView = new BannerVideoView(context);
+////                MediaController mediaController = new MediaController(context);
+////                videoView.setMediaController(mediaController);
+//
+//                videoView.setVideoURI(Uri.parse(bean.getUrl()));
+//                videoView.start();
+//                videoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+//
+//                    @Override
+//                    public void onPrepared(MediaPlayer mp) {
+//                        mp.start();
+//                        mp.setLooping(true);
+//
+//                    }
+//                });
+//                videoView.requestFocus();
+                imageViews.add(surfaceView);
+            } else {
+                View imageView = null;
+                if (imageLoader != null) {
+                    imageView = imageLoader.createImageView(context, bean.getUrl());
+                }
+                if (imageView == null) {
+                    imageView = new ImageView(context);
+                }
+                setScaleType(imageView);
+
+                imageViews.add(imageView);
+                if (imageLoader != null)
+                    imageLoader.displayImage(context, bean.getUrl(), imageView);
+                else
+                    Log.e(tag, "Please set images loader.");
+            }
         }
     }
 
@@ -398,7 +470,6 @@ public class Banner extends FrameLayout implements ViewPager.OnPageChangeListene
                     view.setScaleType(ScaleType.MATRIX);
                     break;
             }
-
         }
     }
 

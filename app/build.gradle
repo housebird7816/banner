@@ -28,5 +28,6 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.1.1'
 
     implementation 'com.github.bumptech.glide:glide:4.9.0'
-    implementation 'cn.housebird:banner:1.0.2'
+    implementation project(path: ':bannerlib')
+//    implementation 'cn.housebird:banner:1.0.3'
 }
